@@ -5,9 +5,9 @@ A kind of `tee` that writes stdin to a rotated log file(s).
 
 I got tired of the absence of lightweight log rotation utility.
 `logrotate` requires a whole infrastructure around itself.
-`bash`-only piping requires a more than one-liner, plus `bash` has to
+`bash`-only piping requires more than a one-liner, plus `bash` has to
 do the read-write loop, which doesn't feel optimal.
-Or, worse, bash scripts restart the main program.
+Or, worse, bash script needs to restart the main program.
 
 Too late I discovered [multilog](http://cr.yp.to/daemontools/multilog.html)
 in [this great SuperUser answer](https://superuser.com/a/291397/32412).
@@ -35,7 +35,7 @@ If `--compress-suffix "bz2"` is given, will check for `/var/log/verbosecommand.l
 * `-z`, `--compress` `<compress-command>`	    Optional parameter - command to run on a complete chunk file, typically packer.
  `{}` is substituted with a full file path.
  It's the packer's responsibility to delete the original chunk file.
-* `-s`, `--compress-suffix` `<suffix>`	    File suffix to append to check for <name> existence, if any.
+* `-s`, `--compress-suffix` `<suffix>`	    File suffix to append to check for `<name>` existence, if any.
 * `-n`, `--null`      Don't print the stdin to stdout. Not sure if it gains anything compared to `>/dev/null`.
 * `-k`, `--chunk` `<chunk-size>` Chunk file size in bytes, after which it's closed and maybe compressed. Default is ~10Mb.
 
