@@ -231,11 +231,11 @@ void Logrotatee::rotateLog() {
 		}
 	}
 	
-	if (fopen(logFilePath, "a") < 0) {
+	logFile = fopen(logFilePath, "a");
+	if (logFile == NULL) {
 		fprintf(stderr, "Error opening %s: %d (%s)\n", logFilePath, errno, strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-	logFile = fopen(logFilePath, "a");
 }
 
 void Logrotatee::go() {
@@ -261,6 +261,14 @@ void Logrotatee::go() {
 	logFile = NULL;
 }
 
+void ignoreSigchld() {
+	struct sigaction sa;
+	sa.sa_handler = SIG_IGN;
+	sa.sa_flags = SA_NOCLDWAIT;
+	sigemptyset(&sa.sa_mask);
+	sigaction(SIGCHLD, &sa, NULL);
+}
+
 int main(int argc, char *argv[]) {
 
 	Arguments commandArgs(argc, argv);
@@ -270,11 +278,7 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 	
-	struct sigaction sa;
-	sa.sa_handler = SIG_IGN;
-	sa.sa_flags = SA_NOCLDWAIT;
-	sigemptyset(&sa.sa_mask);
-	sigaction(SIGCHLD, &sa, NULL);
+	ignoreSigchld();
 	
 	Logrotatee lr(commandArgs);
 	lr.go();
