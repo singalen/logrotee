@@ -176,17 +176,17 @@ string replaceSubstring(string str, const string& what, const string& with) {
 int execCompression(string command) {
 	
 	static pid_t lastChild = 0;
-	
-	if (lastChild != 0) {
-		siginfo_t siginfo;
-		siginfo.si_pid = 0;
-		int childStatusChanged = waitid(P_PID, lastChild, &siginfo, WNOHANG);
-		if (errno != ECHILD && childStatusChanged != 0) {
-			fprintf(stderr, "Error in waitid(): %d - %s\n", errno, strerror(errno));
-		} else if (siginfo.si_pid != 0) {
-			fprintf(stderr, "Warning: a previous compression process %d==%d has not exited yet.\n", siginfo.si_pid, lastChild);
-		}
-	}
+
+//	if (lastChild != 0) {
+//		siginfo_t siginfo;
+//		siginfo.si_pid = 0;
+//		int childStatusChanged = waitid(P_PID, lastChild, &siginfo, WEXITED);
+//		if (errno != ECHILD && childStatusChanged != 0) {
+//			fprintf(stderr, "Error in waitid(): %d - %s\n", errno, strerror(errno));
+//		} else if (siginfo.si_pid != 0) {
+//			fprintf(stderr, "Warning: a previous compression process %d==%d has not exited yet.\n", siginfo.si_pid, lastChild);
+//		}
+//	}
 	
 	pid_t child;
 	for(;;) {
@@ -203,12 +203,12 @@ int execCompression(string command) {
 		fprintf(stderr, "Error %d in fork(%s)\n", errno, strerror(errno));
 	} else {
 		int status = system(command.c_str());
-		if (status == -1) {
-			fprintf(stderr, "Can't run the command(%s)\n", command.c_str());
-		}
-		else if (WEXITSTATUS(status) != 0) {
-			fprintf(stderr, "Error %d running the command(%s)\n", status, command.c_str());
-		}
+//		if (status == -1) {
+//			fprintf(stderr, "Can't run the command(%s)\n", command.c_str());
+//		}
+//		else if (WEXITSTATUS(status) != 0) {
+//			fprintf(stderr, "Error %d running the command(%s)\n", status, command.c_str());
+//		}
 		// Child must die without closing file descriptors.
 		abort();
 	}
