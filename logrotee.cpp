@@ -1,7 +1,13 @@
 #include <string>
 #include <iostream>
+#include <inttypes.h>
+#include <cstdlib>
+#include <cerrno>
+#include <csignal>
+#include <cstring>
 #include <getopt.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 #define BUF_SIZE 4096
 #define DEFAULT_CHUNK_SIZE (10*1000*1000)
@@ -35,15 +41,15 @@ public:
 		for(;;) {
 			int optionIndex = 0;
 			static struct option longOptions[] = {
-					{"compress", required_argument, nullptr, 'c' },
-					{"compress-suffix", required_argument, nullptr, 's' },
-					{"null", no_argument, nullptr, 'n' },
-					{"dates", no_argument, nullptr, 'd' },
-					{"max-files", required_argument, nullptr, 'm'},
-					{"chunk", required_argument, nullptr, 'k'},
-					{"help", no_argument, nullptr, 'h' },
-					{"version", no_argument, nullptr, 'v' },
-					{nullptr, 0, nullptr, 0 }
+					{"compress", required_argument, NULL, 'c' },
+					{"compress-suffix", required_argument, NULL, 's' },
+					{"null", no_argument, NULL, 'n' },
+					{"dates", no_argument, NULL, 'd' },
+					{"max-files", required_argument, NULL, 'm'},
+					{"chunk", required_argument, NULL, 'k'},
+					{"help", no_argument, NULL, 'h' },
+					{"version", no_argument, NULL, 'v' },
+					{NULL, 0, NULL, 0 }
 			};
 			
 			getoptResult = getopt_long(argc, argv, "", longOptions, &optionIndex);
@@ -68,20 +74,16 @@ public:
 					break;
 				
 				case 'm':
-					try {
-						maxFiles = std::stoi(optarg);
-					}
-					catch (const std::logic_error& e) {
+					maxFiles = strtoumax(optarg, NULL, 10);
+					if (errno == ERANGE) {
 						std::cout << "Cannot parse number: " << optarg << std::endl;
 						exit(EXIT_FAILURE);
 					}
 					break;
 				
 				case 'k':
-					try {
-						chunkSize = (size_t) std::stoi(optarg);
-					}
-					catch (const std::logic_error& e) {
+					chunkSize = (size_t) strtoumax(optarg, NULL, 10);
+					if (errno != 0) {
 						std::cout << "Cannot parse number: " << optarg << std::endl;
 						exit(EXIT_FAILURE);
 					}
@@ -116,20 +118,26 @@ public:
 	}
 	
 	void usage() {
-		std::cout << "Example usage: verbose_command | logrotee /var/log/verbose_command.log"
+		std::cout << "Example usage: verbose_command | logrotee"
 				" --compress \"bzip2 {}\" --compress-suffix .bz2"
-				" --null --chunk 2M" << std::endl;
+				" --null --chunk 2M"
+				" /var/log/verbose_command.log" << std::endl;
 	}
 };
 
 
-struct Logrotatee {
+class Logrotatee {
 	pid_t lastChild;
-	FILE *chunkFile;
+	FILE *logFile;
 	size_t bytesInChunk;
+	int nameSuffix;
 	const Arguments& commandArgs;
 	
-	Logrotatee(const Arguments& args) : lastChild(0), chunkFile(nullptr), bytesInChunk(0), commandArgs(args) {};
+public:
+	explicit Logrotatee(const Arguments& args)
+			: lastChild(0), logFile(NULL), bytesInChunk(0), nameSuffix(0), commandArgs(args)
+	{};
+	
 	void go();
 	
 private:
@@ -144,12 +152,15 @@ bool fileExists(string name) {
 }
 
 string Logrotatee::getNewChunkName() {
-	int suffix = 0;
 	string name;
 	do {
-		suffix++;
-		name = commandArgs.logFilePath + '.' + std::to_string(suffix);
-	} while (fileExists(name + commandArgs.compressSuffix));
+		nameSuffix++;
+		char buffer[32];
+		snprintf(buffer, 32, ".%d", nameSuffix);
+		name = commandArgs.logFilePath + buffer;
+		// Hmm, a race condition. Hopefully no one else creates these files, or
+		// we'll lose one of them.
+	} while (fileExists(name) || fileExists(name + commandArgs.compressSuffix));
 	
 	return name;
 }
@@ -170,24 +181,36 @@ int execCompression(string command) {
 		siginfo_t siginfo;
 		siginfo.si_pid = 0;
 		int childStatusChanged = waitid(P_PID, lastChild, &siginfo, WNOHANG);
-		if (childStatusChanged != 0) {
-			fprintf(stderr, "Error in waitid()\n");
+		if (errno != ECHILD && childStatusChanged != 0) {
+			fprintf(stderr, "Error in waitid(): %d - %s\n", errno, strerror(errno));
 		} else if (siginfo.si_pid != 0) {
 			fprintf(stderr, "Warning: a previous compression process %d==%d has not exited yet.\n", siginfo.si_pid, lastChild);
 		}
 	}
 	
-	pid_t child = fork();
+	pid_t child;
+	for(;;) {
+		child = fork();
+		if (errno != EAGAIN) {
+			break;
+		}
+		sleep(1);
+	}
+	
 	if (child > 0) {
 		lastChild = child;
 	} else if (child < 0) {
-		fprintf(stderr, "Error in fork()\n");
+		fprintf(stderr, "Error %d in fork(%s)\n", errno, strerror(errno));
 	} else {
 		int status = system(command.c_str());
-		if (WEXITSTATUS(status) != 0) {
-			fprintf(stderr, "Error %d running the command(%s)\n", WEXITSTATUS(status), command.c_str());
-			return 2;
+		if (status == -1) {
+			fprintf(stderr, "Can't run the command(%s)\n", command.c_str());
 		}
+		else if (WEXITSTATUS(status) != 0) {
+			fprintf(stderr, "Error %d running the command(%s)\n", status, command.c_str());
+		}
+		// Child must die without closing file descriptors.
+		abort();
 	}
 	
 	return 0;
@@ -196,10 +219,10 @@ int execCompression(string command) {
 void Logrotatee::rotateLog() {
 	const char *logFilePath = commandArgs.logFilePath.c_str();
 	
-	if (chunkFile != nullptr) {
+	if (logFile != NULL) {
 		string newName = getNewChunkName();
-		fclose(chunkFile);
-		chunkFile = nullptr;
+		fclose(logFile);
+		logFile = NULL;
 		rename(logFilePath, newName.c_str());
 		
 		if (!commandArgs.compressCommand.empty()) {
@@ -212,15 +235,15 @@ void Logrotatee::rotateLog() {
 		fprintf(stderr, "Error opening %s: %d (%s)\n", logFilePath, errno, strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-	chunkFile = fopen(logFilePath, "a");
+	logFile = fopen(logFilePath, "a");
 }
 
 void Logrotatee::go() {
 	char buffer[BUF_SIZE];
 	
 	rotateLog();
-	for(char *s = fgets(buffer, BUF_SIZE, stdin); s != nullptr; s = fgets(buffer, BUF_SIZE, stdin)) {
-		fputs(s, chunkFile);
+	for(char *s = fgets(buffer, BUF_SIZE, stdin); s != NULL; s = fgets(buffer, BUF_SIZE, stdin)) {
+		fputs(s, logFile);
 		if (!commandArgs.nullStdout) {
 			fputs(s, stdout);
 		}
@@ -234,18 +257,24 @@ void Logrotatee::go() {
 		}
 	}
 	
-	fclose(chunkFile);
-	chunkFile = nullptr;
+	fclose(logFile);
+	logFile = NULL;
 }
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
+
 	Arguments commandArgs(argc, argv);
 
 	if (commandArgs.isInvalid()) {
 		commandArgs.usage();
 		exit(EXIT_FAILURE);
 	}
+	
+	struct sigaction sa;
+	sa.sa_handler = SIG_IGN;
+	sa.sa_flags = SA_NOCLDWAIT;
+	sigemptyset(&sa.sa_mask);
+	sigaction(SIGCHLD, &sa, NULL);
 	
 	Logrotatee lr(commandArgs);
 	lr.go();

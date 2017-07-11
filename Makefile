@@ -10,7 +10,8 @@ cleanup:
 	rm -f /tmp/logrotee-test*
 
 test_simple: cleanup
-	$(GENERATE_22M) | cmake-build-debug/logrotee --null /tmp/logrotee-test
+	bash -c 'for i in $$(seq 1 1000000); do echo "1234567890 line $$i"; done' | \
+		cmake-build-debug/logrotee --null /tmp/logrotee-test
 	ls -lah /tmp/logrotee-test*
 
 test_compress: cleanup
