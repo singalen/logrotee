@@ -10,7 +10,7 @@
 #include <sys/wait.h>
 
 #define BUF_SIZE 4096
-#define DEFAULT_CHUNK_SIZE (10*1000*1000)
+#define DEFAULT_CHUNK_SIZE (20*1000*1000)
 
 #pragma ide diagnostic ignored "ClangTidyInspection"
 
@@ -251,9 +251,13 @@ void Logrotatee::go() {
 		// As much as we want to avoid extra scanning, we need to know when to rotate logs.
 		size_t length = strlen(s);
 		bytesInChunk += length;
-		if (length > 0 && s[length-1] == '\n' && bytesInChunk >= commandArgs.chunkSize) {
-			rotateLog();
-			bytesInChunk = 0;
+		if (length > 0 && bytesInChunk >= commandArgs.chunkSize) {
+			bool isLineBreak = s[length - 1] == '\n';
+			bool breakAnyway = bytesInChunk >= commandArgs.chunkSize * 12 / 10;
+			if (isLineBreak || breakAnyway) {
+				rotateLog();
+				bytesInChunk = 0;
+			}
 		}
 	}
 	
