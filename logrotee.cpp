@@ -41,15 +41,15 @@ public:
 		for(;;) {
 			int optionIndex = 0;
 			static struct option longOptions[] = {
-					{"compress", required_argument, NULL, 'c' },
-					{"compress-suffix", required_argument, NULL, 's' },
-					{"null", no_argument, NULL, 'n' },
-					{"dates", no_argument, NULL, 'd' },
-					{"max-files", required_argument, NULL, 'm'},
-					{"chunk", required_argument, NULL, 'k'},
-					{"help", no_argument, NULL, 'h' },
-					{"version", no_argument, NULL, 'v' },
-					{NULL, 0, NULL, 0 }
+					{"compress", required_argument, nullptr, 'c' },
+					{"compress-suffix", required_argument, nullptr, 's' },
+					{"null", no_argument, nullptr, 'n' },
+					{"dates", no_argument, nullptr, 'd' },
+					{"max-files", required_argument, nullptr, 'm'},
+					{"chunk", required_argument, nullptr, 'k'},
+					{"help", no_argument, nullptr, 'h' },
+					{"version", no_argument, nullptr, 'v' },
+					{nullptr, 0, nullptr, 0 }
 			};
 			
 			getoptResult = getopt_long(argc, argv, "", longOptions, &optionIndex);
@@ -74,7 +74,7 @@ public:
 					break;
 				
 				case 'm':
-					maxFiles = strtoumax(optarg, NULL, 10);
+					maxFiles = strtoumax(optarg, nullptr, 10);
 					if (errno == ERANGE) {
 						std::cout << "Cannot parse number: " << optarg << std::endl;
 						exit(EXIT_FAILURE);
@@ -82,7 +82,7 @@ public:
 					break;
 				
 				case 'k':
-					chunkSize = (size_t) strtoumax(optarg, NULL, 10);
+					chunkSize = (size_t) strtoumax(optarg, nullptr, 10);
 					if (errno != 0) {
 						std::cout << "Cannot parse number: " << optarg << std::endl;
 						exit(EXIT_FAILURE);
@@ -135,7 +135,7 @@ class Logrotatee {
 	
 public:
 	explicit Logrotatee(const Arguments& args)
-			: lastChild(0), logFile(NULL), bytesInChunk(0), nameSuffix(0), commandArgs(args)
+			: lastChild(0), logFile(nullptr), bytesInChunk(0), nameSuffix(0), commandArgs(args)
 	{};
 	
 	void go();
@@ -146,7 +146,7 @@ private:
 };
 
 
-bool fileExists(string name) {
+bool fileExists(const string& name) {
 	struct stat sb;
 	return stat(name.c_str(), &sb) == 0;
 }
@@ -173,7 +173,7 @@ string replaceSubstring(string str, const string& what, const string& with) {
 	return str;
 }
 
-int execCompression(string command) {
+int execCompression(const string& command) {
 	
 	static pid_t lastChild = 0;
 
@@ -219,10 +219,10 @@ int execCompression(string command) {
 void Logrotatee::rotateLog() {
 	const char *logFilePath = commandArgs.logFilePath.c_str();
 	
-	if (logFile != NULL) {
+	if (logFile != nullptr) {
 		string newName = getNewChunkName();
 		fclose(logFile);
-		logFile = NULL;
+		logFile = nullptr;
 		rename(logFilePath, newName.c_str());
 		
 		if (!commandArgs.compressCommand.empty()) {
@@ -232,7 +232,7 @@ void Logrotatee::rotateLog() {
 	}
 	
 	logFile = fopen(logFilePath, "a");
-	if (logFile == NULL) {
+	if (logFile == nullptr) {
 		fprintf(stderr, "Error opening %s: %d (%s)\n", logFilePath, errno, strerror(errno));
 		exit(EXIT_FAILURE);
 	}
@@ -242,7 +242,7 @@ void Logrotatee::go() {
 	char buffer[BUF_SIZE];
 	
 	rotateLog();
-	for(char *s = fgets(buffer, BUF_SIZE, stdin); s != NULL; s = fgets(buffer, BUF_SIZE, stdin)) {
+	for(char *s = fgets(buffer, BUF_SIZE, stdin); s != nullptr; s = fgets(buffer, BUF_SIZE, stdin)) {
 		fputs(s, logFile);
 		if (!commandArgs.nullStdout) {
 			fputs(s, stdout);
@@ -262,7 +262,7 @@ void Logrotatee::go() {
 	}
 	
 	fclose(logFile);
-	logFile = NULL;
+	logFile = nullptr;
 }
 
 void ignoreSigchld() {
@@ -270,7 +270,7 @@ void ignoreSigchld() {
 	sa.sa_handler = SIG_IGN;
 	sa.sa_flags = SA_NOCLDWAIT;
 	sigemptyset(&sa.sa_mask);
-	sigaction(SIGCHLD, &sa, NULL);
+	sigaction(SIGCHLD, &sa, nullptr);
 }
 
 int main(int argc, char *argv[]) {
