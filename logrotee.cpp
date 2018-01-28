@@ -200,7 +200,7 @@ int execCompression(const string& command) {
 	if (child > 0) {
 		lastChild = child;
 	} else if (child < 0) {
-		fprintf(stderr, "Error %d in fork(%s)\n", errno, strerror(errno));
+		fprintf(stderr, "Error %d in fork(%s): %s\n", errno, command.c_str(), strerror(errno));
 	} else {
 		int status = system(command.c_str());
 //		if (status == -1) {
